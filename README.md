@@ -99,6 +99,19 @@ The server intentionally runs unelevated. Some probes therefore report
 This is by design: an unattended trust agent should not hold root. Treat
 `null` as "unresolved signal" and escalate out-of-band if it matters.
 
+## Verify (turnkey, on the Mac)
+
+One command sets up, tests, and inspects the live server end to end:
+
+```bash
+./verify.sh
+```
+
+It creates a venv, installs, runs `pytest`, then inspects the server over MCP
+stdio — listing and calling every tool. See **[RUNBOOK.md](RUNBOOK.md)** for the
+step-by-step Mac verification, including how to chase down any signal that reads
+`unknown` against real macOS output.
+
 ## Testing
 
 ```bash
@@ -107,19 +120,29 @@ pytest
 ```
 
 The smoke tests run on any OS (they exercise the graceful-degradation paths on
-Linux CI); the meaningful signal values obviously require macOS.
+Linux CI); the meaningful signal values obviously require macOS. For a Node-free
+protocol inspection (no browser, no `npx`):
+
+```bash
+python tools/inspect_stdio.py          # human-readable
+python tools/inspect_stdio.py --json   # machine-readable summary
+```
 
 ## Layout
 
 ```
 signalgrid-mcp/
 ├── server.py                  # back-compat stdio entry point
+├── verify.sh                  # one-command turnkey verify (install + test + inspect)
+├── RUNBOOK.md                 # step-by-step Mac verification runbook
 ├── src/signalgrid_mcp/
 │   ├── app.py                 # FastMCP instance + shared annotations
 │   ├── runner.py              # subprocess plumbing (run/text/probe/run_json)
 │   ├── formatting.py          # pagination, filtering, markdown/JSON rendering
 │   ├── server.py              # entry point (main)
 │   └── tools/                 # one module per signal domain
+├── tools/inspect_stdio.py     # Node-free MCP inspector (protocol/read-only/honesty)
 ├── tests/test_smoke.py
-└── evaluation.xml             # MCP eval suite (10 read-only Q&A pairs)
+├── tests/test_parsers.py      # parser fixtures pinned against captured output
+└── evaluation.xml             # MCP eval suite (read-only Q&A pairs)
 ```
