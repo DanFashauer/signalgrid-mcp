@@ -1,0 +1,31 @@
+[project]
+name = "signalgrid-mcp"
+version = "1.0.1"
+description = "SignalGrid — an MCP server exposing macOS-native device trust signals (read-only)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dan Fashauer" }]
+dependencies = [
+    "mcp>=1.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+signalgrid-mcp = "signalgrid_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/signalgrid_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

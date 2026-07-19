@@ -1,0 +1,22 @@
+name: CI
+
+# The macOS signal probes only return real values on a Mac, but the smoke tests
+# exercise tool registration, read-only annotations, and the graceful-degradation
+# paths on any OS — so CI runs them on Linux to keep those invariants green.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (with dev extras)
+        run: pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q

@@ -1,0 +1,54 @@
+<!--
+  SignalGrid MCP evaluation suite.
+
+  All questions are read-only, independent, and answerable with the server's
+  tools alone. Because SignalGrid reports live device state, questions are
+  designed around values that are stable on any healthy modern macOS host
+  (Apple's own signing chain, fixed macOS conventions, and the server's
+  documented semantics) rather than volatile counts.
+
+  Run each question against a fresh LLM session that has ONLY this MCP server
+  attached, then verify the final answer by string comparison.
+-->
+<evaluation>
+  <qa_pair>
+    <question>Inspect the code signature of the system binary /bin/ls. What is the name of the certificate authority at the ROOT of its authority chain?</question>
+    <answer>Apple Root CA</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the code signature of /Applications/Safari.app. What is the FIRST authority listed in its signature (the immediate signer, not the chain root)?</question>
+    <answer>Software Signing</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Look up Safari in this Mac's application inventory. According to the inventory, where was it obtained from?</question>
+    <answer>apple</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A launchd property list is discovered at ~/Library/LaunchAgents/com.example.helper.plist. What scope label does the persistence inventory assign to items found in that directory?</question>
+    <answer>user_agent</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The persistence inventory flags one launchd scope as unusual and worth a close look because that directory is non-standard. Which scope label is it?</question>
+    <answer>user_daemon_nonstandard</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>When the security posture check reports enabled=null for FileVault, what single word describes the actual state of that control according to the server's semantics: "off", "on", or "unknown"?</question>
+    <answer>unknown</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The local accounts tool separates real login accounts from system/daemon accounts using a numeric uid threshold. Accounts at or above which uid are treated as real login accounts?</question>
+    <answer>500</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Request the one-call posture report with no arguments and count its top-level sections. How many sections does the default report contain?</question>
+    <answer>6</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Exactly one of the following sections is included in the default one-call posture report: "network", "time_machine", "xprotect", "persistence". Which one?</question>
+    <answer>xprotect</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>List the third-party launch items with a page size (limit) of 5. If more items exist beyond the first page, what is the value of the field that tells you which offset to request next?</question>
+    <answer>5</answer>
+  </qa_pair>
+</evaluation>
