@@ -16,10 +16,34 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 VENV="${VENV:-.venv}"
-PY="${PYTHON:-python3}"
+
+# Pick a Python >= 3.10 (the project's requires-python). An explicit PYTHON=
+# override always wins; otherwise probe the common interpreter names and, as a
+# last resort, a uv-managed interpreter. This keeps ./verify.sh turnkey on a
+# stock Mac whose /usr/bin/python3 is still 3.9.
+py_ok() { "$1" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)' >/dev/null 2>&1; }
+select_python() {
+  if [ -n "${PYTHON:-}" ]; then printf '%s\n' "$PYTHON"; return 0; fi
+  for cand in python3.13 python3.12 python3.11 python3.10 python3 python; do
+    if command -v "$cand" >/dev/null 2>&1 && py_ok "$cand"; then command -v "$cand"; return 0; fi
+  done
+  if command -v uv >/dev/null 2>&1; then
+    for v in 3.12 3.11 3.13 3.10; do
+      p="$(uv python find "$v" 2>/dev/null)" || true
+      if [ -n "$p" ] && py_ok "$p"; then printf '%s\n' "$p"; return 0; fi
+    done
+  fi
+  return 1
+}
+if ! PY="$(select_python)"; then
+  echo "ERROR: no Python >= 3.10 found (this project's requires-python)." >&2
+  echo "       Install one, e.g.:  xcode-select --install   or   uv python install 3.12" >&2
+  echo "       or point at your own:  PYTHON=/path/to/python3.10+ ./verify.sh" >&2
+  exit 1
+fi
 
 echo "== SignalGrid MCP verify =="
-echo "-- host: $(uname -s) $(uname -m); python: $("$PY" --version 2>&1)"
+echo "-- host: $(uname -s) $(uname -m); python: $("$PY" --version 2>&1) ($PY)"
 
 echo
 echo "== 1/3  install (venv: $VENV) =="
