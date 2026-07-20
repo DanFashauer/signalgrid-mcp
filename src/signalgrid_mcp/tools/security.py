@@ -26,8 +26,8 @@ POSTURE_CHECKS: dict[str, tuple[list[str], str, str]] = {
     ),
     "firewall_stealth": (
         ["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getstealthmode"],
-        "enabled",
-        "disabled",
+        "stealth mode is on",
+        "stealth mode is off",
     ),
     "firewall_block_all": (
         ["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getblockall"],

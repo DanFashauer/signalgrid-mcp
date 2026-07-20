@@ -8,7 +8,7 @@ from __future__ import annotations
 from signalgrid_mcp.tools.mdm import parse_enrollment
 from signalgrid_mcp.tools.network import _parse_lsof_listeners
 from signalgrid_mcp.tools.processes import _parse_ps
-from signalgrid_mcp.tools.security import classify
+from signalgrid_mcp.tools.security import POSTURE_CHECKS, classify
 from signalgrid_mcp.tools.users import _parse_users
 
 
@@ -59,6 +59,34 @@ class TestSharingClassification:
 
     def test_probe_failure_is_unknown(self):
         assert classify("timeout after 20s", ok=False, enabled_needle="x", disabled_needle="y") is None
+
+
+class TestFirewallStealthClassification:
+    """Regression: `socketfilterfw --getstealthmode` prints
+    "Firewall stealth mode is on/off" -- NOT "enabled"/"disabled". The check
+    used the wrong needles, so a clearly-off stealth mode classified as null
+    (unknown) instead of False. These pin the real vendor wording against the
+    needles wired into POSTURE_CHECKS, so reverting the fix fails here too.
+    """
+
+    ON_NEEDLE = POSTURE_CHECKS["firewall_stealth"][1]
+    OFF_NEEDLE = POSTURE_CHECKS["firewall_stealth"][2]
+
+    def test_stealth_on_is_true(self):
+        assert classify("Firewall stealth mode is on", True, self.ON_NEEDLE, self.OFF_NEEDLE) is True
+
+    def test_stealth_off_is_false_not_unknown(self):
+        # The exact live-server raw string that used to return null.
+        assert classify("Firewall stealth mode is off", True, self.ON_NEEDLE, self.OFF_NEEDLE) is False
+
+    def test_configured_needles_match_vendor_wording(self):
+        # Guards the fix at the source: the needles wired into POSTURE_CHECKS
+        # must actually resolve the real command output to a bool, not null.
+        for raw, expected in [
+            ("Firewall stealth mode is on", True),
+            ("Firewall stealth mode is off", False),
+        ]:
+            assert classify(raw, True, self.ON_NEEDLE, self.OFF_NEEDLE) is expected
 
 
 class TestLsofFieldParsing:
