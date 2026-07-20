@@ -1,6 +1,6 @@
 [project]
 name = "signalgrid-mcp"
-version = "1.0.1"
+version = "1.0.2"
 description = "SignalGrid — an MCP server exposing macOS-native device trust signals (read-only)"
 readme = "README.md"
 requires-python = ">=3.10"
