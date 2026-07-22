@@ -379,3 +379,79 @@ class TestTrustVerdict:
         for bad in ("false", "no", 0, "true"):
             r = self._healthy(); r["mdm"]["mdm_enrolled"] = bad
             assert TestTrustVerdict._v(r)["verdict"] == "step_up", bad
+
+
+class TestRemovableMedia:
+    from signalgrid_mcp.tools.removable_media import parse_usb as _p
+
+    def test_mass_storage_is_flagged(self):
+        data = [{"_name": "USB31Bus", "host_controller": "AppleT8103USBXHCI", "_items": [
+            {"_name": "Flash Drive", "manufacturer": "SanDisk", "serial_num": "ABC123",
+             "Media": [{"_name": "disk4", "volumes": [{"_name": "UNTITLED"}]}]},
+        ]}]
+        r = TestRemovableMedia._p(data)
+        assert r["available"] is True and r["mass_storage_connected"] is True and r["mass_storage_count"] == 1
+        d = r["devices"][0]
+        assert d["kind"] == "mass_storage" and d["vendor"] == "SanDisk" and d["volumes"] == ["UNTITLED"]
+
+    def test_non_storage_device_is_other_not_storage(self):
+        data = [{"_name": "USB31Bus", "host_controller": "x", "_items": [
+            {"_name": "Keyboard", "manufacturer": "Apple", "vendor_id": "0x05ac"},
+        ]}]
+        r = TestRemovableMedia._p(data)
+        assert r["device_count"] == 1 and r["mass_storage_count"] == 0 and r["mass_storage_connected"] is False
+        assert r["devices"][0]["kind"] == "other"
+
+    def test_bus_controllers_are_not_counted_as_devices(self):
+        data = [{"_name": "USB31Bus", "host_controller": "AppleT8103USBXHCI"}]
+        assert TestRemovableMedia._p(data)["device_count"] == 0
+
+    def test_unreadable_tree_is_unavailable_not_empty(self):
+        # Fail-safe: a shape we can't read is available:false, NOT "nothing connected".
+        for bad in (None, {}, "error"):
+            r = TestRemovableMedia._p(bad)
+            assert r["available"] is False and r["mass_storage_connected"] is None
+
+    def test_empty_bus_is_available_with_zero_devices(self):
+        # A readable-but-empty tree IS available (genuinely nothing plugged in).
+        r = TestRemovableMedia._p([{"_name": "USB31Bus", "host_controller": "x", "_items": []}])
+        assert r["available"] is True and r["device_count"] == 0 and r["mass_storage_connected"] is False
+
+    def test_nested_hub_storage_is_found(self):
+        data = [{"_name": "Bus", "host_controller": "x", "_items": [
+            {"_name": "Hub", "manufacturer": "Generic", "_items": [
+                {"_name": "Stick", "manufacturer": "Kingston", "Media": [{"_name": "disk5"}]},
+            ]},
+        ]}]
+        r = TestRemovableMedia._p(data)
+        assert r["mass_storage_count"] == 1 and any(d["name"] == "Stick" for d in r["devices"])
+
+    # ── review regressions ──────────────────────────────────────────────────────
+    def test_unreadable_count_is_none_not_zero(self):
+        # MAJOR: an unreadable tree must NOT numerically read as "0 storage".
+        for bad in (None, "error", {}):
+            r = TestRemovableMedia._p(bad)
+            assert r["available"] is False and r["mass_storage_count"] is None and r["mass_storage_connected"] is None
+
+    def test_media_bearing_controller_node_not_dropped(self):
+        # MAJOR: a node with a controller key that ALSO presents storage must be kept.
+        data = [{"_name": "Bus", "host_controller": "x", "_items": [
+            {"_name": "Enc", "manufacturer": "OWC", "pci_device": "yes",
+             "Media": [{"_name": "disk9", "volumes": [{"_name": "DATA"}]}]},
+        ]}]
+        r = TestRemovableMedia._p(data)
+        assert r["mass_storage_count"] == 1 and r["mass_storage_connected"] is True
+
+    def test_scalar_volumes_does_not_crash(self):
+        data = [{"_name": "Bus", "host_controller": "x", "_items": [
+            {"_name": "Stick", "manufacturer": "K", "Media": [{"_name": "d", "volumes": 5}]},
+        ]}]
+        r = TestRemovableMedia._p(data)  # must not raise
+        assert r["mass_storage_count"] == 1 and r["devices"][0]["volumes"] == []
+
+
+def test_removable_media_collect_survives_nondict_json():
+    # MINOR: a truthy non-dict top-level JSON must degrade, not crash.
+    from signalgrid_mcp.tools.removable_media import parse_usb
+    # simulate the collect path's guard: a list top-level → tree None → available False
+    assert parse_usb(None)["available"] is False

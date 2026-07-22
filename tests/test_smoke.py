@@ -34,6 +34,7 @@ EXPECTED_TOOLS = {
     "signalgrid_local_users",
     "signalgrid_installed_apps",
     "signalgrid_process_snapshot",
+    "signalgrid_removable_media",
     "signalgrid_posture_report",
     "signalgrid_trust_verdict",
 }
