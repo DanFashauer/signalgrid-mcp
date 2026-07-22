@@ -201,6 +201,13 @@ SOURCING_MANIFEST: tuple[SignalSource, ...] = (
         "grid_collected",
         "Resilience / recovery posture — can this device be restored after loss or compromise.",
     ),
+    _src(
+        ReportSection.SYSTEM_EXTENSIONS,
+        "macos.system_extensions",
+        "System extensions — stranded / conflicting security agents",
+        "grid_collected",
+        "Endpoint-hardening integrity — a security agent still registered after removal (blocks reinstall) or two conflicting agents.",
+    ),
 )
 
 
