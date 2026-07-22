@@ -102,3 +102,13 @@ def signalgrid_posture_report(
 def posture_resource() -> str:
     """The default posture report as a JSON resource."""
     return json.dumps(build_report(_DEFAULT_SECTIONS), indent=2, default=str)
+
+
+@mcp.resource("signalgrid://sourcing")
+def sourcing_resource() -> str:
+    """How this server's macOS signals reach the SignalGrid fabric — the
+    grid_collected sourcing manifest (device-independent, safe to read anywhere).
+    Lets a connecting fabric discover each signal's provenance and fidelity."""
+    from signalgrid_mcp.sourcing import sourcing_json
+
+    return sourcing_json()
