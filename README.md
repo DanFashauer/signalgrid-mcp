@@ -45,6 +45,33 @@ The aggregate report is also exposed as an MCP resource at `signalgrid://posture
 - **Degrades gracefully.** On a non-macOS host, or when a probe needs
   elevation, tools return structured error/unknown text — they never crash.
 
+## How these signals reach the Grid (sourcing)
+
+SignalGrid's decision fabric classifies every signal by *how* it is obtained —
+`api` (a vendor read API), `native` (a first-party integration), `grid_collected`
+(SignalGrid does the lifting itself), or `unavailable` (a real gap). **This
+server is the `grid_collected` path for macOS**: SIP, FileVault, Gatekeeper, MDM
+enrollment, XProtect currency and the rest are facts no cloud API hands you
+faithfully in real time — you read them on the device.
+
+Every signal here is therefore classified `grid_collected` at **`medium`**
+fidelity — deliberately not `high`. The reads are authoritative, but the fabric
+never over-trusts a signal it had to collect itself, and some probes degrade to
+`unknown` without elevation.
+
+The server publishes this mapping so a connecting fabric can discover each
+signal's provenance, as the MCP resource:
+
+```
+signalgrid://sourcing
+```
+
+It lists every posture-report section → the fabric signal it feeds → its
+acquisition method and fidelity. `tests/test_sourcing.py` pins the manifest as a
+bijection with the report **sections**, so no section can go un-sourced and no
+stale entry can linger. (The per-signal descriptions are prose, not checked
+against collector output.)
+
 ## Install
 
 Requires Python ≥ 3.10 on the Mac being assessed.
@@ -139,6 +166,7 @@ signalgrid-mcp/
 │   ├── app.py                 # FastMCP instance + shared annotations
 │   ├── runner.py              # subprocess plumbing (run/text/probe/run_json)
 │   ├── formatting.py          # pagination, filtering, markdown/JSON rendering
+│   ├── sourcing.py            # grid_collected sourcing manifest (signalgrid://sourcing)
 │   ├── server.py              # entry point (main)
 │   └── tools/                 # one module per signal domain
 ├── tools/inspect_stdio.py     # Node-free MCP inspector (protocol/read-only/honesty)
