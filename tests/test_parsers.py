@@ -450,6 +450,119 @@ class TestRemovableMedia:
         assert r["mass_storage_count"] == 1 and r["devices"][0]["volumes"] == []
 
 
+class TestScreenLock:
+    from signalgrid_mcp.tools.screen_lock import (
+        _bool_flag as _flag,
+    )
+    from signalgrid_mcp.tools.screen_lock import (
+        _int_seconds as _sec,
+    )
+    from signalgrid_mcp.tools.screen_lock import (
+        assess as _assess,
+    )
+    from signalgrid_mcp.tools.screen_lock import (
+        parse_displaysleep as _ds,
+    )
+
+    # ── defaults boolean flag ────────────────────────────────────────────────────
+    def test_flag_explicit_one_zero(self):
+        assert TestScreenLock._flag("1", ok=True) is True
+        assert TestScreenLock._flag("0", ok=True) is False
+
+    def test_flag_absent_key_is_unknown_not_off(self):
+        # Fail-safe: `defaults` prints this when the key doesn't exist. It is
+        # UNKNOWN, never a confident "no password".
+        raw = "The domain/default pair of (com.apple.screensaver, askForPassword) does not exist"
+        assert TestScreenLock._flag(raw, ok=True) is None
+
+    def test_flag_probe_failure_is_unknown(self):
+        assert TestScreenLock._flag("timeout after 20s", ok=False) is None
+
+    def test_flag_garbage_is_unknown_not_true(self):
+        # Anything that isn't 0/1 (after strip) must not read as a boolean.
+        for bad in ("2", "yes", "true", "", "10", "on"):
+            assert TestScreenLock._flag(bad, ok=True) is None, bad
+
+    def test_flag_tolerates_trailing_whitespace(self):
+        # `defaults` output can carry a trailing newline; a stripped '1'/'0' is
+        # still a valid flag (whitespace tolerance is not a fail-open).
+        assert TestScreenLock._flag("1\n", ok=True) is True
+        assert TestScreenLock._flag(" 0 ", ok=True) is False
+
+    # ── numeric grace delay ──────────────────────────────────────────────────────
+    def test_seconds_int_and_float(self):
+        assert TestScreenLock._sec("0", ok=True) == 0
+        assert TestScreenLock._sec("5", ok=True) == 5
+        assert TestScreenLock._sec("5.0", ok=True) == 5
+
+    def test_seconds_error_text_is_none(self):
+        assert TestScreenLock._sec("does not exist", ok=True) is None
+        assert TestScreenLock._sec("-1", ok=True) is None  # no negative delays
+        assert TestScreenLock._sec("x", ok=False) is None
+
+    # ── pmset displaysleep ───────────────────────────────────────────────────────
+    PMSET = "\n".join([
+        "System-wide power settings:",
+        "Currently in use:",
+        " standby              1",
+        " hibernatemode        3",
+        " displaysleep         10",
+        " disksleep            10",
+        " sleep                1",
+    ])
+
+    def test_displaysleep_parsed(self):
+        assert TestScreenLock._ds(self.PMSET, ok=True) == 10
+
+    def test_displaysleep_never_sleeps_is_zero(self):
+        assert TestScreenLock._ds(" displaysleep         0", ok=True) == 0
+
+    def test_displaysleep_missing_is_unknown_not_zero(self):
+        # Fail-safe: absent line → None (unknown), NOT a fabricated 0/"never".
+        assert TestScreenLock._ds("Currently in use:\n sleep 1", ok=True) is None
+        assert TestScreenLock._ds("anything", ok=False) is None
+
+    # ── fail-safe hygiene verdict ────────────────────────────────────────────────
+    def test_healthy_locks_when_idle(self):
+        r = TestScreenLock._assess(True, 0, 10)
+        assert r["locks_when_idle"] is True and r["concerns"] == [] and r["unknowns"] == []
+
+    def test_no_password_is_a_concern_not_locking(self):
+        r = TestScreenLock._assess(False, 0, 10)
+        assert r["locks_when_idle"] is False and any("walk-up" in c for c in r["concerns"])
+
+    def test_display_never_sleeps_is_concern(self):
+        r = TestScreenLock._assess(True, 0, 0)
+        assert r["locks_when_idle"] is False and any("never sleeps" in c for c in r["concerns"])
+
+    def test_long_grace_delay_is_concern(self):
+        r = TestScreenLock._assess(True, 300, 10)
+        assert r["locks_when_idle"] is False and any("grace delay" in c for c in r["concerns"])
+
+    def test_long_display_sleep_is_concern(self):
+        r = TestScreenLock._assess(True, 0, 120)
+        assert r["locks_when_idle"] is False and any("unattended-unlocked" in c for c in r["concerns"])
+
+    def test_all_unknown_is_null_never_locking(self):
+        # BLOCKER shape: nothing readable (non-macOS) → locks_when_idle is None,
+        # never True. Unknown is never graded as "locks".
+        r = TestScreenLock._assess(None, None, None)
+        assert r["locks_when_idle"] is None
+        assert set(r["unknowns"]) == {"password_on_wake", "password_delay_seconds", "display_sleep_minutes"}
+
+    def test_password_ok_but_sleep_unknown_cannot_confirm(self):
+        # A password is required, but we can't read whether the display sleeps →
+        # cannot confirm it ever locks. Null, not True.
+        r = TestScreenLock._assess(True, 0, None)
+        assert r["locks_when_idle"] is None and "display_sleep_minutes" in r["unknowns"]
+
+    def test_concern_dominates_remaining_unknown(self):
+        # A definite concern (no password) outweighs an unreadable display timeout:
+        # the verdict is a firm False, not a soft None.
+        r = TestScreenLock._assess(False, None, None)
+        assert r["locks_when_idle"] is False
+
+
 def test_removable_media_collect_survives_nondict_json():
     # MINOR: a truthy non-dict top-level JSON must degrade, not crash.
     from signalgrid_mcp.tools.removable_media import parse_usb
