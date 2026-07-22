@@ -62,6 +62,19 @@ async def test_posture_report_degrades_gracefully():
         body = report.get("result", report)
         for section in ("identity", "os", "security", "mdm", "updates", "xprotect"):
             assert section in body
+        # system_extensions is opt-in (security-relevant but slower) — it must NOT
+        # be in the fast default report, only available on request.
+        assert "system_extensions" not in body
+
+
+def test_system_extensions_is_optin_not_default():
+    from signalgrid_mcp.tools.report import _DEFAULT_SECTIONS, ReportSection, build_report
+
+    assert ReportSection.SYSTEM_EXTENSIONS not in _DEFAULT_SECTIONS
+    # …but requestable, and it degrades fail-safe off-macOS (available False, never
+    # a fabricated "none installed").
+    section = build_report([ReportSection.SYSTEM_EXTENSIONS])["system_extensions"]
+    assert section.get("available") is False
 
 
 @pytest.mark.anyio

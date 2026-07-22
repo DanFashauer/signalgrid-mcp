@@ -16,6 +16,7 @@ from signalgrid_mcp.tools.mdm import collect_mdm
 from signalgrid_mcp.tools.network import collect_network
 from signalgrid_mcp.tools.security import collect_security, collect_sharing
 from signalgrid_mcp.tools.software import collect_update_settings, collect_xprotect
+from signalgrid_mcp.tools.sysext import collect_system_extensions
 
 
 class ReportSection(str, Enum):
@@ -29,6 +30,7 @@ class ReportSection(str, Enum):
     NETWORK = "network"
     PERSISTENCE = "persistence"
     TIME_MACHINE = "time_machine"
+    SYSTEM_EXTENSIONS = "system_extensions"
 
 
 _COLLECTORS = {
@@ -42,6 +44,7 @@ _COLLECTORS = {
     ReportSection.NETWORK: collect_network,
     ReportSection.PERSISTENCE: collect_persistence_summary,
     ReportSection.TIME_MACHINE: collect_time_machine,
+    ReportSection.SYSTEM_EXTENSIONS: collect_system_extensions,
 }
 
 # Fast, high-signal default. network/persistence add noise; sharing's
@@ -74,7 +77,8 @@ def signalgrid_posture_report(
             description=(
                 "Which sections to include. Default: identity, os, security, "
                 "mdm, updates, xprotect. Also available: sharing, network, "
-                "persistence, time_machine. Pass an explicit list to customize."
+                "persistence, time_machine, system_extensions. Pass an explicit "
+                "list to customize."
             ),
         ),
     ] = None,
@@ -89,7 +93,8 @@ def signalgrid_posture_report(
 
     Args:
         sections: optional list from {identity, os, security, sharing, mdm,
-            updates, xprotect, network, persistence, time_machine}.
+            updates, xprotect, network, persistence, time_machine,
+            system_extensions}.
 
     Returns:
         dict keyed by section name; each value is that section's collector
