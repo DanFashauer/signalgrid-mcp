@@ -25,6 +25,7 @@ ever mutated.
 | Who has accounts? Who is admin? | `signalgrid_local_users` |
 | What apps are installed, and who signed them? | `signalgrid_installed_apps` |
 | What's running right now? | `signalgrid_process_snapshot` |
+| Is removable storage (a data-egress channel) connected? | `signalgrid_removable_media` |
 | Is this app properly signed & notarized? | `signalgrid_codesign_inspect` |
 | **Everything above the fold, in one call** | `signalgrid_posture_report` |
 | **The SignalGrid decision for this Mac (allow / step-up / restrict / deny)** | `signalgrid_trust_verdict` |
