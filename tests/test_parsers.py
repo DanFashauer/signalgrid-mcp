@@ -195,3 +195,99 @@ class TestUsersParsing:
 
     def test_empty_output(self):
         assert _parse_users("") == []
+
+
+class TestSystemExtensionParsing:
+    from signalgrid_mcp.tools.sysext import parse_system_extensions as _p
+
+    SAMPLE = (
+        "2 extension(s)\n"
+        "--- com.apple.system_extension.endpoint_security\n"
+        "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+        "*\t*\t1A2B3C4D5E\tcom.vendor.falcon.Agent (7.20/1)\tFalcon\t[activated enabled]\n"
+        "--- com.apple.system_extension.network_extension\n"
+        "\t\t9Z8Y7X6W5V\tcom.other.net.ext (2.0/3)\tNetExt\t[terminated waiting to uninstall on reboot]\n"
+    )
+
+    def test_active_extension_is_classified_active(self):
+        r = TestSystemExtensionParsing._p(self.SAMPLE)
+        assert r["available"] is True and r["count"] == 2 and r["reliable"] is True
+        falcon = next(e for e in r["extensions"] if e["name"] == "Falcon")
+        assert falcon["status"] == "active" and falcon["enabled"] is True and falcon["active"] is True
+        assert falcon["teamID"] == "1A2B3C4D5E" and falcon["version"] == "7.20/1"
+
+    def test_terminated_extension_is_flagged_residual(self):
+        r = TestSystemExtensionParsing._p(self.SAMPLE)
+        net = next(e for e in r["extensions"] if e["name"] == "NetExt")
+        assert net["status"] == "residual" and net["enabled"] is False
+        assert r["residual_count"] == 1 and r["active_count"] == 1
+
+    def test_removed_marker_is_residual_not_active(self):
+        # BLOCKER regression: a deleted-app extension reads "activated enabled
+        # (removed)" — still registered. It must be residual, NEVER clean active.
+        raw = (
+            "1 extension(s)\n"
+            "--- com.apple.system_extension.endpoint_security\n"
+            "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "*\t*\tTEAM123456\tcom.vendor.agent (1.0)\tGhost\t[activated enabled (removed)]\n"
+        )
+        r = TestSystemExtensionParsing._p(raw)
+        g = next(e for e in r["extensions"] if e["name"] == "Ghost")
+        assert g["status"] == "residual" and r["residual_count"] == 1 and r["active_count"] == 0
+
+    def test_terminating_is_residual(self):
+        assert TestSystemExtensionParsing._p(
+            "1 extension(s)\n--- x\nenabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "*\t*\tT\tc.x (1)\tX\t[terminating]\n"
+        )["extensions"][0]["status"] == "residual"
+
+    def test_unrecognized_output_is_unavailable_not_empty(self):
+        r = TestSystemExtensionParsing._p("zsh: command not found: systemextensionsctl")
+        assert r["available"] is False and r["count"] is None and r["extensions"] == []
+
+    def test_error_text_mentioning_extensions_is_not_a_listing(self):
+        # MAJOR regression: a loose substring must not pass as a real listing.
+        r = TestSystemExtensionParsing._p("Operation not permitted reading extension(s)")
+        assert r["available"] is False
+
+    def test_empty_output_is_unavailable(self):
+        assert TestSystemExtensionParsing._p("")["available"] is False
+
+    def test_unknown_state_is_never_active(self):
+        raw = (
+            "1 extension(s)\n--- com.apple.system_extension.endpoint_security\n"
+            "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "*\t\tTEAMXYZ\tcom.x.ext (1.0)\tMystery\t[some future state]\n"
+        )
+        assert next(e for e in TestSystemExtensionParsing._p(raw)["extensions"] if e["name"] == "Mystery")["status"] == "unknown"
+
+    def test_disabled_row_with_teamid_in_bundle_is_not_dropped(self):
+        # MAJOR regression: a residual row whose bundle contains "teamid" and whose
+        # enabled marker is empty must NOT be mistaken for the column header.
+        raw = (
+            "1 extension(s)\n--- com.apple.system_extension.network_extension\n"
+            "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "\t\t9Z8Y7X6W5V\tcom.acme.teamid.net (2.0)\tHelper\t[terminated waiting to uninstall]\n"
+        )
+        r = TestSystemExtensionParsing._p(raw)
+        assert r["count"] == 1 and r["residual_count"] == 1 and r["reliable"] is True
+
+    def test_count_mismatch_is_unreliable(self):
+        # MAJOR regression: header declares more than we parsed → unreliable, so a
+        # missing (possibly residual) extension can't read as clean.
+        raw = (
+            "3 extension(s)\n--- com.apple.system_extension.endpoint_security\n"
+            "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "*\t*\tT1\tc.one (1)\tOne\t[activated enabled]\n"
+        )
+        r = TestSystemExtensionParsing._p(raw)
+        assert r["available"] is True and r["reliable"] is False and r["declared_count"] == 3
+
+    def test_malformed_row_is_counted_unparsed_not_dropped(self):
+        raw = (
+            "1 extension(s)\n--- com.apple.system_extension.endpoint_security\n"
+            "enabled\tactive\tteamID\tbundleID (version)\tname\t[state]\n"
+            "*\t*\tT1\tc.short (1)\n"
+        )
+        r = TestSystemExtensionParsing._p(raw)
+        assert r["unparsed_rows"] == 1 and r["reliable"] is False

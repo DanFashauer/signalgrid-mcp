@@ -21,6 +21,7 @@ ever mutated.
 | What's listening on the network? | `signalgrid_listening_services` |
 | What persists across reboots? (launchd items) | `signalgrid_launch_items` |
 | Any third-party kernel extensions? | `signalgrid_kernel_extensions` |
+| Any stranded/conflicting system extensions? | `signalgrid_system_extensions` |
 | Who has accounts? Who is admin? | `signalgrid_local_users` |
 | What apps are installed, and who signed them? | `signalgrid_installed_apps` |
 | What's running right now? | `signalgrid_process_snapshot` |
