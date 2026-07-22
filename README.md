@@ -27,6 +27,7 @@ ever mutated.
 | What's running right now? | `signalgrid_process_snapshot` |
 | Is this app properly signed & notarized? | `signalgrid_codesign_inspect` |
 | **Everything above the fold, in one call** | `signalgrid_posture_report` |
+| **The SignalGrid decision for this Mac (allow / step-up / restrict / deny)** | `signalgrid_trust_verdict` |
 
 The aggregate report is also exposed as an MCP resource at `signalgrid://posture`.
 
