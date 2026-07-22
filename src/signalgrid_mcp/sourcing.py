@@ -208,6 +208,13 @@ SOURCING_MANIFEST: tuple[SignalSource, ...] = (
         "grid_collected",
         "Endpoint-hardening integrity — a security agent still registered after removal (blocks reinstall) or two conflicting agents.",
     ),
+    _src(
+        ReportSection.SCREEN_LOCK,
+        "macos.screen_lock",
+        "Screen-lock / auto-lock hygiene (password-on-wake, grace delay, display sleep)",
+        "grid_collected",
+        "Unattended-device / physical-custody posture — a shared endpoint that does not auto-lock hands the last session to the next person to walk up.",
+    ),
 )
 
 

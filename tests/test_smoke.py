@@ -35,6 +35,7 @@ EXPECTED_TOOLS = {
     "signalgrid_installed_apps",
     "signalgrid_process_snapshot",
     "signalgrid_removable_media",
+    "signalgrid_screen_lock",
     "signalgrid_posture_report",
     "signalgrid_trust_verdict",
 }
@@ -64,9 +65,10 @@ async def test_posture_report_degrades_gracefully():
         body = report.get("result", report)
         for section in ("identity", "os", "security", "mdm", "updates", "xprotect"):
             assert section in body
-        # system_extensions is opt-in (security-relevant but slower) — it must NOT
-        # be in the fast default report, only available on request.
+        # system_extensions and screen_lock are opt-in (security-relevant but
+        # slower) — they must NOT be in the fast default report, only on request.
         assert "system_extensions" not in body
+        assert "screen_lock" not in body
 
 
 def test_system_extensions_is_optin_not_default():
@@ -77,6 +79,16 @@ def test_system_extensions_is_optin_not_default():
     # a fabricated "none installed").
     section = build_report([ReportSection.SYSTEM_EXTENSIONS])["system_extensions"]
     assert section.get("available") is False
+
+
+def test_screen_lock_is_optin_and_failsafe_off_macos():
+    from signalgrid_mcp.tools.report import _DEFAULT_SECTIONS, ReportSection, build_report
+
+    assert ReportSection.SCREEN_LOCK not in _DEFAULT_SECTIONS
+    # Requestable, and off-macOS every probe is unreadable → locks_when_idle is
+    # None (unknown), NEVER a fabricated "true". Unknown is never graded as locking.
+    section = build_report([ReportSection.SCREEN_LOCK])["screen_lock"]
+    assert section.get("locks_when_idle") is None
 
 
 @pytest.mark.anyio
