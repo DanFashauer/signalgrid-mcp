@@ -14,6 +14,7 @@ from signalgrid_mcp.tools import (  # noqa: F401
     software,
     sysext,
     users,
+    verdict,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "software",
     "sysext",
     "users",
+    "verdict",
 ]

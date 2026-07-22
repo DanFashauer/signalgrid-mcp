@@ -35,6 +35,7 @@ EXPECTED_TOOLS = {
     "signalgrid_installed_apps",
     "signalgrid_process_snapshot",
     "signalgrid_posture_report",
+    "signalgrid_trust_verdict",
 }
 
 

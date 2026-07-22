@@ -291,3 +291,91 @@ class TestSystemExtensionParsing:
         )
         r = TestSystemExtensionParsing._p(raw)
         assert r["unparsed_rows"] == 1 and r["reliable"] is False
+
+
+class TestTrustVerdict:
+    from signalgrid_mcp.tools.verdict import compute_verdict as _v
+
+    ON = {"enabled": True}
+    OFF = {"enabled": False}
+    UNK = {"enabled": None}
+
+    def _healthy(self):
+        return {
+            "security": {"sip": self.ON, "filevault": self.ON, "gatekeeper": self.ON, "firewall": self.ON},
+            "mdm": {"mdm_enrolled": True},
+            "updates": {"AutomaticCheckEnabled": True},
+            "xprotect": {"xprotect_definitions": "2183"},
+        }
+
+    def test_all_healthy_allows(self):
+        assert TestTrustVerdict._v(self._healthy())["verdict"] == "allow"
+
+    def test_one_control_off_restricts(self):
+        r = self._healthy(); r["security"]["filevault"] = self.OFF
+        assert TestTrustVerdict._v(r)["verdict"] == "restrict"
+
+    def test_two_controls_off_deny(self):
+        r = self._healthy(); r["security"]["filevault"] = self.OFF; r["security"]["sip"] = self.OFF
+        assert TestTrustVerdict._v(r)["verdict"] == "deny"
+
+    def test_unknown_never_allows(self):
+        # Fail-safe: an entirely unreadable report (non-macOS) is step_up, NOT allow.
+        r = {"security": {"error": "csrutil unavailable"}, "mdm": {"mdm_enrolled": None},
+             "updates": {"AutomaticCheckEnabled": None}, "xprotect": {"xprotect_definitions": "unavailable"}}
+        v = TestTrustVerdict._v(r)
+        assert v["verdict"] == "step_up" and v["verdict"] != "allow"
+
+    def test_a_single_unknown_control_never_allows(self):
+        r = self._healthy(); r["security"]["gatekeeper"] = self.UNK
+        assert TestTrustVerdict._v(r)["verdict"] == "step_up"
+
+    def test_unmanaged_steps_up(self):
+        r = self._healthy(); r["mdm"]["mdm_enrolled"] = False
+        assert TestTrustVerdict._v(r)["verdict"] == "step_up"
+
+    def test_stranded_extension_restricts(self):
+        r = self._healthy()
+        r["system_extensions"] = {"available": True, "reliable": True, "residual_count": 1}
+        assert TestTrustVerdict._v(r)["verdict"] == "restrict"
+
+    def test_stranded_extension_plus_control_off_denies(self):
+        r = self._healthy(); r["security"]["firewall"] = self.OFF
+        r["system_extensions"] = {"available": True, "reliable": True, "residual_count": 2}
+        assert TestTrustVerdict._v(r)["verdict"] == "deny"
+
+    def test_unreadable_sysext_section_steps_up(self):
+        r = self._healthy(); r["system_extensions"] = {"available": False}
+        assert TestTrustVerdict._v(r)["verdict"] == "step_up"
+
+    def test_auto_update_off_steps_up(self):
+        r = self._healthy(); r["updates"]["AutomaticCheckEnabled"] = False
+        assert TestTrustVerdict._v(r)["verdict"] == "step_up"
+
+    # ── review regressions: no path to a false 'allow' ──────────────────────────
+    def test_unreadable_updates_section_never_allows(self):
+        # BLOCKER regression: an errored / None / absent updates section must NOT
+        # pass as healthy.
+        for bad in ({"error": "defaults unavailable"}, {"AutomaticCheckEnabled": None}, {}):
+            r = self._healthy(); r["updates"] = bad
+            assert TestTrustVerdict._v(r)["verdict"] == "step_up", bad
+        r = self._healthy(); del r["updates"]
+        assert TestTrustVerdict._v(r)["verdict"] == "step_up"
+
+    def test_xprotect_not_found_stderr_never_allows(self):
+        # MAJOR regression: real `defaults` failure text must read as unknown, not
+        # a valid definition version.
+        for bad in ("The domain/default pair of (X, Version) does not exist", "%Su", "unavailable: not found"):
+            r = self._healthy(); r["xprotect"] = {"xprotect_definitions": bad}
+            assert TestTrustVerdict._v(r)["verdict"] == "step_up", bad
+
+    def test_a_real_xprotect_version_allows(self):
+        r = self._healthy(); r["xprotect"] = {"xprotect_definitions": "2183"}
+        assert TestTrustVerdict._v(r)["verdict"] == "allow"
+
+    def test_non_boolean_mdm_never_allows(self):
+        # MINOR regression: a non-boolean enrollment value ("false", 0) must not be
+        # treated as enrolled.
+        for bad in ("false", "no", 0, "true"):
+            r = self._healthy(); r["mdm"]["mdm_enrolled"] = bad
+            assert TestTrustVerdict._v(r)["verdict"] == "step_up", bad
