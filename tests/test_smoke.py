@@ -30,6 +30,7 @@ EXPECTED_TOOLS = {
     "signalgrid_listening_services",
     "signalgrid_launch_items",
     "signalgrid_kernel_extensions",
+    "signalgrid_system_extensions",
     "signalgrid_local_users",
     "signalgrid_installed_apps",
     "signalgrid_process_snapshot",
