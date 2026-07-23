@@ -32,6 +32,9 @@ ever mutated.
 | **The SignalGrid decision for this Mac (allow / step-up / restrict / deny)** | `signalgrid_trust_verdict` |
 
 The aggregate report is also exposed as an MCP resource at `signalgrid://posture`.
+Call `signalgrid_posture_report` with `include_verdict: true` to get the raw facts
+**and** the folded allow/step-up/restrict/deny decision in one round-trip (the same
+fail-safe computation as `signalgrid_trust_verdict`).
 
 ## Design principles
 
