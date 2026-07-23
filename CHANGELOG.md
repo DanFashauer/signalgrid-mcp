@@ -5,8 +5,15 @@ semantic versioning. Every tool is read-only and fails safe by design.
 
 ## v1.0.2
 
-Patch release. No tool behavior changes; every tool remains read-only. `pytest`
-30 passing.
+Patch release. No tool behavior changes; every tool remains read-only.
+
+### Added
+- **Cross-repo posture-report contract test** (`tests/test_posture_contract.py`) —
+  proves `signalgrid_posture_report` still emits the shape the SignalGrid
+  Review-Hub `macos-posture` connector consumes (required sections + security
+  controls). Reads the canonical contract via `SIGNALGRID_CONTRACT_PATH` when the
+  Review-Hub `pnpm run verify:all` provides it (single source of truth), and falls
+  back to a built-in core-shape default so it also guards this repo's own CI.
 
 ### Fixed
 - **firewall_stealth parser** — `socketfilterfw --getstealthmode` prints
