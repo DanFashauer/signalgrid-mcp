@@ -85,6 +85,18 @@ def signalgrid_posture_report(
             ),
         ),
     ] = None,
+    include_verdict: Annotated[
+        bool,
+        Field(
+            description=(
+                "Also fold the posture into the fail-safe SignalGrid verdict "
+                "(allow / step_up / restrict / deny) under a 'verdict' key. "
+                "Default False (the report stays purely factual). When True, the "
+                "sections the verdict needs (security, mdm, updates, xprotect, "
+                "system_extensions) are collected even if not in `sections`."
+            ),
+        ),
+    ] = False,
 ) -> dict[str, Any]:
     """Full device trust snapshot in a single round-trip: identity + OS +
     security + MDM + patch state by default, with optional extra sections.
@@ -94,16 +106,37 @@ def signalgrid_posture_report(
     anything that looks off. A failed section reports {"error": ...} instead
     of sinking the whole snapshot.
 
+    Set include_verdict=True to also get the on-device SignalGrid decision as a
+    'verdict' summary alongside the raw facts — the same fail-safe fold as
+    signalgrid_trust_verdict (unknown is never 'allow'). The verdict is a derived
+    summary, never a collected signal, so it is absent unless explicitly asked for.
+
     Args:
         sections: optional list from {identity, os, security, sharing, mdm,
             updates, xprotect, network, persistence, time_machine,
             system_extensions, screen_lock}.
+        include_verdict: attach the folded allow/step_up/restrict/deny verdict.
 
     Returns:
         dict keyed by section name; each value is that section's collector
-        output (same shapes as the corresponding focused tools).
+        output (same shapes as the corresponding focused tools). With
+        include_verdict, an extra 'verdict' key holds the folded decision.
     """
-    return build_report(sections or _DEFAULT_SECTIONS)
+    selected = list(sections or _DEFAULT_SECTIONS)
+    if not include_verdict:
+        return build_report(selected)
+    # Function-local import breaks the module cycle (verdict.py imports this module
+    # at top). The verdict is only honest over the sections it grades — pull them
+    # in (deduped) even if the caller narrowed `sections`, so the fold sees real
+    # data instead of fail-safing everything to unknown.
+    from signalgrid_mcp.tools.verdict import _VERDICT_SECTIONS, compute_verdict
+
+    for s in _VERDICT_SECTIONS:
+        if s not in selected:
+            selected.append(s)
+    report = build_report(selected)
+    report["verdict"] = compute_verdict(report)
+    return report
 
 
 @mcp.resource("signalgrid://posture")

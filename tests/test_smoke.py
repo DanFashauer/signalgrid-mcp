@@ -69,6 +69,41 @@ async def test_posture_report_degrades_gracefully():
         # slower) — they must NOT be in the fast default report, only on request.
         assert "system_extensions" not in body
         assert "screen_lock" not in body
+        # The verdict is a derived summary, absent unless explicitly requested.
+        assert "verdict" not in body
+
+
+@pytest.mark.anyio
+async def test_posture_report_include_verdict():
+    async with create_connected_server_and_client_session(mcp._mcp_server) as client:
+        result = await client.call_tool(
+            "signalgrid_posture_report", {"include_verdict": True}
+        )
+        assert not result.isError
+        body = result.structuredContent.get("result", result.structuredContent)
+        # The folded verdict is attached, and the sections it grades are pulled in
+        # even though they aren't all in the fast default set.
+        assert "verdict" in body
+        for needed in ("security", "mdm", "updates", "xprotect", "system_extensions"):
+            assert needed in body, needed
+        v = body["verdict"]
+        # Fail-safe: off-macOS nothing reads healthy, so the folded verdict is
+        # step_up — NEVER allow. Same discipline as signalgrid_trust_verdict.
+        assert v["verdict"] == "step_up" and v["verdict"] != "allow"
+
+
+def test_posture_report_verdict_matches_trust_verdict_tool():
+    # The report's folded verdict must be the SAME computation as the standalone
+    # tool — one verdict, two entry points, never a second divergent code path.
+    from signalgrid_mcp.tools.report import signalgrid_posture_report
+    from signalgrid_mcp.tools.verdict import build_report as _br
+    from signalgrid_mcp.tools.verdict import _VERDICT_SECTIONS, compute_verdict
+
+    folded = signalgrid_posture_report(include_verdict=True)["verdict"]
+    standalone = compute_verdict(_br(_VERDICT_SECTIONS))
+    assert folded["verdict"] == standalone["verdict"]
+    assert folded["criticals"] == standalone["criticals"]
+    assert folded["unknowns"] == standalone["unknowns"]
 
 
 def test_system_extensions_is_optin_not_default():
