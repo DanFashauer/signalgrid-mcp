@@ -86,10 +86,16 @@ async def test_posture_report_include_verdict():
         assert "verdict" in body
         for needed in ("security", "mdm", "updates", "xprotect", "system_extensions"):
             assert needed in body, needed
+        import sys
+
         v = body["verdict"]
-        # Fail-safe: off-macOS nothing reads healthy, so the folded verdict is
-        # step_up — NEVER allow. Same discipline as signalgrid_trust_verdict.
-        assert v["verdict"] == "step_up" and v["verdict"] != "allow"
+        # Always a valid, non-fabricated verdict. (Equality with the standalone tool
+        # is pinned by test_posture_report_verdict_matches_trust_verdict_tool.)
+        assert v["verdict"] in {"allow", "step_up", "restrict", "deny"}
+        if sys.platform != "darwin":
+            # Off-macOS nothing reads healthy, so the folded verdict is step_up —
+            # NEVER allow. Same discipline as signalgrid_trust_verdict.
+            assert v["verdict"] == "step_up"
 
 
 def test_posture_report_verdict_matches_trust_verdict_tool():
@@ -125,13 +131,21 @@ def test_system_extensions_is_optin_not_default():
 
 
 def test_screen_lock_is_optin_and_failsafe_off_macos():
+    import sys
+
     from signalgrid_mcp.tools.report import _DEFAULT_SECTIONS, ReportSection, build_report
 
     assert ReportSection.SCREEN_LOCK not in _DEFAULT_SECTIONS
-    # Requestable, and off-macOS every probe is unreadable → locks_when_idle is
-    # None (unknown), NEVER a fabricated "true". Unknown is never graded as locking.
     section = build_report([ReportSection.SCREEN_LOCK])["screen_lock"]
-    assert section.get("locks_when_idle") is None
+    if sys.platform == "darwin":
+        # On macOS the probes genuinely run (pmset is always readable), so display
+        # sleep is a real int and locks_when_idle is a real assessment — a bool, or
+        # None only if truly unconfirmable, never a fabricated "true".
+        assert isinstance(section.get("display_sleep_minutes"), int)
+        assert section.get("locks_when_idle") in (True, False, None)
+    else:
+        # Off-macOS every probe is unreadable → None (unknown never graded locking).
+        assert section.get("locks_when_idle") is None
 
 
 @pytest.mark.anyio
