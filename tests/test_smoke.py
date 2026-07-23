@@ -107,13 +107,21 @@ def test_posture_report_verdict_matches_trust_verdict_tool():
 
 
 def test_system_extensions_is_optin_not_default():
+    import sys
+
     from signalgrid_mcp.tools.report import _DEFAULT_SECTIONS, ReportSection, build_report
 
     assert ReportSection.SYSTEM_EXTENSIONS not in _DEFAULT_SECTIONS
-    # …but requestable, and it degrades fail-safe off-macOS (available False, never
-    # a fabricated "none installed").
+    # …but requestable. The behaviour is host-dependent, so assert per platform:
     section = build_report([ReportSection.SYSTEM_EXTENSIONS])["system_extensions"]
-    assert section.get("available") is False
+    if sys.platform == "darwin":
+        # On macOS the probe genuinely runs (systemextensionsctl needs no root), so
+        # it reports available with a REAL integer count — never a fabricated None.
+        assert section.get("available") is True
+        assert isinstance(section.get("count"), int)
+    else:
+        # Off-macOS it degrades fail-safe — available False, never "none installed".
+        assert section.get("available") is False
 
 
 def test_screen_lock_is_optin_and_failsafe_off_macos():
