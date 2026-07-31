@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Dan Fashauer" }]
 dependencies = [
-    "mcp>=1.9.0",
+    "mcp>=1.9.0,<2",
 ]
 
 [project.optional-dependencies]
