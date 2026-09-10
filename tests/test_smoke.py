@@ -36,6 +36,7 @@ EXPECTED_TOOLS = {
     "signalgrid_process_snapshot",
     "signalgrid_removable_media",
     "signalgrid_screen_lock",
+    "signalgrid_time_machine",
     "signalgrid_posture_report",
     "signalgrid_trust_verdict",
 }
