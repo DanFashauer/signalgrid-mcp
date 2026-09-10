@@ -49,6 +49,10 @@ EXPECTED_TOOLS = {
     "signalgrid_codesign_inspect",
     "signalgrid_time_machine",
     "signalgrid_posture_report",
+    "signalgrid_removable_media",
+    "signalgrid_screen_lock",
+    "signalgrid_system_extensions",
+    "signalgrid_trust_verdict",
 }
 
 UNKNOWN_MARKERS = ("not macos", "not found", '"unknown"', "could not", "unavailable", ": null")
