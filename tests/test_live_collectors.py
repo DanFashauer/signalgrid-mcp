@@ -69,3 +69,36 @@ def test_screen_lock_status_parses_when_sysadminctl_reports():
     assert password_on_wake is not None, (
         f"sysadminctl reported a screenLock status but it did not parse: {sl['raw']!r}"
     )
+
+
+# The core trust controls — the ones the verdict folds. These read via unprivileged
+# commands on any macOS (csrutil/spctl/fdesetup status, system_profiler, sw_vers), so
+# they are a gate, not a flake. They catch the SAME class as the three fixes above in
+# every OTHER core signal: a command whose output wording Apple changes (needle drift)
+# leaves the control reading "unknown" forever, which the Linux job cannot see.
+def test_core_security_controls_read_as_booleans():
+    from signalgrid_mcp.tools.security import collect_security
+
+    sec = collect_security()
+    for control in ("sip", "filevault", "gatekeeper"):
+        entry = sec.get(control) or {}
+        assert entry.get("enabled") in (True, False), (
+            f"{control} did not read as a bool — needle drift or a moved command? {entry!r}"
+        )
+
+
+def test_identity_reads_serial_and_model():
+    from signalgrid_mcp.tools.identity import collect_identity
+
+    ident = collect_identity()
+    assert ident.get("serial_number"), f"no serial number read: {ident!r}"
+    assert ident.get("model_identifier"), f"no model identifier read: {ident!r}"
+
+
+def test_os_version_reads_as_a_version():
+    from signalgrid_mcp.tools.identity import collect_os
+
+    version = collect_os().get("product_version")
+    assert version and re.match(r"\d+(\.\d+)*$", str(version).strip()), (
+        f"OS product_version did not read as a version: {version!r}"
+    )
