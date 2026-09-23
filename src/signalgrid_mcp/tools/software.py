@@ -8,23 +8,48 @@ from pydantic import Field
 
 from signalgrid_mcp.app import READ_ONLY, mcp
 from signalgrid_mcp.formatting import ResponseFormat, name_filter, paginate, render_page
-from signalgrid_mcp.runner import defaults_read, run_json, text
+from signalgrid_mcp.runner import run, run_json, text
 
 SU_DOMAIN = "/Library/Preferences/com.apple.SoftwareUpdate"
+# Each value is (plist, candidate_keys). The FIRST key that reads wins; the keys
+# differ across macOS releases, so trying more than one keeps the signal live
+# instead of always-unknown.
+#
+# XProtect DEFINITIONS version was the `Version` key in XProtect.bundle's Info.plist
+# on older macOS, but that key is GONE on macOS 11+ (measured absent on macOS 26/27),
+# where the same value is `CFBundleShortVersionString` (e.g. 5360). Reading only
+# `Version` therefore returned "unavailable: Could not find key 'Version'" on every
+# modern Mac, so `_xprotect_readable` graded it UNKNOWN and the verdict raised the bar
+# on EVERY device — a dead signal masquerading as caution. Fall back so a current Mac
+# reports its real XProtect version; an old Mac still reads `Version` first, unchanged.
 XPROTECT_PLISTS = {
     "xprotect_definitions": (
         "/Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist",
-        "Version",
+        ("Version", "CFBundleShortVersionString"),
     ),
     "xprotect_remediator": (
         "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/Info.plist",
-        "CFBundleShortVersionString",
+        ("CFBundleShortVersionString",),
     ),
     "mrt": (
         "/Library/Apple/System/Library/CoreServices/MRT.app/Contents/Info.plist",
-        "CFBundleShortVersionString",
+        ("CFBundleShortVersionString",),
     ),
 }
+
+
+def _pref(domain: str, key: str) -> str | None:
+    """A single preference value, or None when the key is absent or unreadable.
+
+    Keys on the EXIT CODE. `defaults read` exits nonzero when the key does not exist
+    (common on modern macOS: `AutomaticCheckEnabled` and `LastUpdatesAvailable` are gone
+    on macOS 26/27), but probe/defaults_read report ok=True with the error text as the
+    answer — which stored "Error: Could not find key …" AS THE VALUE, contradicting this
+    module's documented "null when unset or unreadable" contract. Only an exit-0 read
+    with output is a value.
+    """
+    r = run(["defaults", "read", domain, key])
+    return r["stdout"] if (r.get("ok") and r.get("stdout")) else None
 
 
 def collect_update_settings() -> dict[str, Any]:
@@ -37,21 +62,34 @@ def collect_update_settings() -> dict[str, Any]:
         "LastSuccessfulDate",
         "LastUpdatesAvailable",
     ]
-    out: dict[str, Any] = {}
-    for k in keys:
-        p = defaults_read(SU_DOMAIN, k)
-        out[k] = p["raw"] if p["ok"] else None
-    app_store = defaults_read("/Library/Preferences/com.apple.commerce", "AutoUpdate")
-    out["AppStoreAutoUpdate"] = app_store["raw"] if app_store["ok"] else None
+    out: dict[str, Any] = {k: _pref(SU_DOMAIN, k) for k in keys}
+    out["AppStoreAutoUpdate"] = _pref("/Library/Preferences/com.apple.commerce", "AutoUpdate")
     return out
 
 
 def collect_xprotect() -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for name, (plist, key) in XPROTECT_PLISTS.items():
+    for name, (plist, keys) in XPROTECT_PLISTS.items():
         # `defaults read` accepts a plist path without the .plist extension.
-        p = defaults_read(plist.removesuffix(".plist"), key)
-        out[name] = p["raw"] if p["ok"] else f"unavailable: {p['raw']}"
+        domain = plist.removesuffix(".plist")
+        last = "no candidate key configured"
+        for key in keys:
+            # The EXIT CODE, not probe's `ok` — `defaults read` exits nonzero when the
+            # key is absent, but `probe`/`defaults_read` report ok=True and hand back the
+            # error text as the "answer" (they distinguish "check ran" from "check could
+            # not run", not "key present" from "key absent"). Stopping on ok=True broke
+            # the fallback: it took `Version`'s "does not exist" error as the value and
+            # never tried `CFBundleShortVersionString`. Only an exit-0 read with output is
+            # a real value to stop on; anything else falls through to the next key.
+            r = run(["defaults", "read", domain, key])
+            if r.get("ok") and r.get("stdout"):
+                out[name] = r["stdout"]
+                break
+            last = (r.get("stderr") or r.get("error") or "").strip() or f"exit {r.get('exit_code')}"
+        else:
+            # Every candidate key failed — report the last reason, still fail-safe:
+            # `_xprotect_readable` grades a non-version string UNKNOWN.
+            out[name] = f"unavailable: {last}"
     return out
 
 
