@@ -51,14 +51,21 @@ def test_update_settings_are_null_or_value_never_an_error_string():
         ), f"update setting {key} leaked an error string: {value!r}"
 
 
-def test_screen_lock_status_parses_to_a_known_state():
+def test_screen_lock_status_parses_when_sysadminctl_reports():
     # Regression: reading com.apple.screensaver askForPassword/Delay (gone on macOS 11+)
     # left password_on_wake permanently unknown. sysadminctl carries the real state.
+    #
+    # A headless CI runner has no GUI login session, so sysadminctl may decline to report
+    # a lock state at all — which is NOT the regression this guards. Skip that case (the
+    # raw carries no "screenLock" line) and assert only when sysadminctl actually reports:
+    # then a parse of None means the wording changed or the source broke — the real defect.
     from signalgrid_mcp.runner import probe
     from signalgrid_mcp.tools.screen_lock import parse_screenlock_status
 
     sl = probe(["sysadminctl", "-screenLock", "status"])
+    if "screenlock" not in sl["raw"].lower():
+        pytest.skip(f"sysadminctl reported no screenLock status (headless session?): {sl['raw']!r}")
     password_on_wake, _delay = parse_screenlock_status(sl["raw"], sl["ok"])
     assert password_on_wake is not None, (
-        f"sysadminctl screenLock status did not parse to a known lock state: {sl['raw']!r}"
+        f"sysadminctl reported a screenLock status but it did not parse: {sl['raw']!r}"
     )
