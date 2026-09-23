@@ -619,3 +619,39 @@ class TestXProtectCollector:
         # but the collector should not present it as an answer).
         out = self._collect(monkeypatch, {})
         assert out["xprotect_definitions"].startswith("unavailable:")
+
+
+class TestUpdateSettingsCollector:
+    """collect_update_settings must honor its "null when unset or unreadable" contract.
+    On macOS 26/27 `AutomaticCheckEnabled` and `LastUpdatesAvailable` are absent
+    (`defaults read` exits nonzero), but probe reports ok=True with the error text — so
+    the old code stored "Error: Could not find key …" as the value. That is not null and
+    would read as a bogus setting. The fix keys on the exit code and yields None.
+    """
+
+    @staticmethod
+    def _collect(monkeypatch, by_key):
+        from signalgrid_mcp.tools import software
+
+        def fake_run(cmd, timeout=None):
+            key = cmd[-1]
+            return by_key.get(
+                key, {"ok": False, "exit_code": 1, "stdout": "", "stderr": "does not exist"}
+            )
+
+        monkeypatch.setattr(software, "run", fake_run)
+        return software.collect_update_settings()
+
+    def test_absent_key_is_none_not_the_error_string(self, monkeypatch):
+        out = self._collect(
+            monkeypatch,
+            {
+                # present keys read their value; absent ones (default) must become None.
+                "AutomaticDownload": {"ok": True, "exit_code": 0, "stdout": "1", "stderr": ""},
+                "ConfigDataInstall": {"ok": True, "exit_code": 0, "stdout": "1", "stderr": ""},
+            },
+        )
+        assert out["AutomaticDownload"] == "1"
+        assert out["ConfigDataInstall"] == "1"
+        assert out["AutomaticCheckEnabled"] is None  # absent on modern macOS
+        assert out["LastUpdatesAvailable"] is None

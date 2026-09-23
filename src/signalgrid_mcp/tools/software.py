@@ -8,7 +8,7 @@ from pydantic import Field
 
 from signalgrid_mcp.app import READ_ONLY, mcp
 from signalgrid_mcp.formatting import ResponseFormat, name_filter, paginate, render_page
-from signalgrid_mcp.runner import defaults_read, run, run_json, text
+from signalgrid_mcp.runner import run, run_json, text
 
 SU_DOMAIN = "/Library/Preferences/com.apple.SoftwareUpdate"
 # Each value is (plist, candidate_keys). The FIRST key that reads wins; the keys
@@ -38,6 +38,20 @@ XPROTECT_PLISTS = {
 }
 
 
+def _pref(domain: str, key: str) -> str | None:
+    """A single preference value, or None when the key is absent or unreadable.
+
+    Keys on the EXIT CODE. `defaults read` exits nonzero when the key does not exist
+    (common on modern macOS: `AutomaticCheckEnabled` and `LastUpdatesAvailable` are gone
+    on macOS 26/27), but probe/defaults_read report ok=True with the error text as the
+    answer — which stored "Error: Could not find key …" AS THE VALUE, contradicting this
+    module's documented "null when unset or unreadable" contract. Only an exit-0 read
+    with output is a value.
+    """
+    r = run(["defaults", "read", domain, key])
+    return r["stdout"] if (r.get("ok") and r.get("stdout")) else None
+
+
 def collect_update_settings() -> dict[str, Any]:
     keys = [
         "AutomaticCheckEnabled",
@@ -48,12 +62,8 @@ def collect_update_settings() -> dict[str, Any]:
         "LastSuccessfulDate",
         "LastUpdatesAvailable",
     ]
-    out: dict[str, Any] = {}
-    for k in keys:
-        p = defaults_read(SU_DOMAIN, k)
-        out[k] = p["raw"] if p["ok"] else None
-    app_store = defaults_read("/Library/Preferences/com.apple.commerce", "AutoUpdate")
-    out["AppStoreAutoUpdate"] = app_store["raw"] if app_store["ok"] else None
+    out: dict[str, Any] = {k: _pref(SU_DOMAIN, k) for k in keys}
+    out["AppStoreAutoUpdate"] = _pref("/Library/Preferences/com.apple.commerce", "AutoUpdate")
     return out
 
 
