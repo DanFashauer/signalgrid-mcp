@@ -568,3 +568,34 @@ def test_removable_media_collect_survives_nondict_json():
     from signalgrid_mcp.tools.removable_media import parse_usb
     # simulate the collect path's guard: a list top-level → tree None → available False
     assert parse_usb(None)["available"] is False
+
+
+class TestCodesignVerify:
+    """`codesign --verify --deep --strict` is SILENT on success (exit 0, no output),
+    which `text()` turned into its "unavailable" fallback — so EVERY validly-signed app
+    read as if the check could not run, and the field's whole job ("valid on disk") was
+    unreachable. `_verify` keys on the exit code instead. Measured on real macOS 27:
+    /System/Applications/Calculator.app returned "unavailable" before, "valid on disk"
+    after."""
+
+    @staticmethod
+    def _verify(monkeypatch, result):
+        from signalgrid_mcp.tools import codesign
+
+        monkeypatch.setattr(codesign, "run", lambda cmd, timeout=None: result)
+        return codesign._verify("/x")
+
+    def test_silent_exit_zero_is_valid_not_unavailable(self, monkeypatch):
+        out = self._verify(monkeypatch, {"ok": True, "exit_code": 0, "stdout": "", "stderr": ""})
+        assert out == "valid on disk"
+
+    def test_nonzero_exit_reports_the_failure_reason(self, monkeypatch):
+        out = self._verify(
+            monkeypatch,
+            {"ok": False, "exit_code": 1, "stdout": "", "stderr": "code object is not signed at all"},
+        )
+        assert "not signed" in out and "unavailable" not in out
+
+    def test_could_not_run_at_all_is_unavailable(self, monkeypatch):
+        out = self._verify(monkeypatch, {"ok": False, "error": "not found: codesign"})
+        assert out.startswith("unavailable")
