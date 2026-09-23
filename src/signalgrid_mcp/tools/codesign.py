@@ -7,7 +7,24 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from signalgrid_mcp.app import READ_ONLY, mcp
-from signalgrid_mcp.runner import text
+from signalgrid_mcp.runner import run, text
+
+
+def _verify(path: str) -> str:
+    """Signature validity for `path`, keyed on the EXIT CODE.
+
+    `codesign --verify --deep --strict` is SILENT on success — exit 0, no stdout, no
+    stderr — so `text()` returned its "unavailable" fallback and EVERY validly-signed
+    app read as if the check could not run (the field's whole job, "valid on disk", was
+    unreachable). Map it explicitly: exit 0 -> valid, nonzero -> the specific failure
+    on stderr, couldn't-run-at-all -> unavailable.
+    """
+    r = run(["codesign", "--verify", "--deep", "--strict", path])
+    if "error" in r:
+        return f"unavailable: {r['error']}"
+    if r["ok"]:
+        return r["stdout"] or r["stderr"] or "valid on disk"
+    return r["stderr"] or r["stdout"] or f"invalid (exit {r['exit_code']})"
 
 
 @mcp.tool(name="signalgrid_codesign_inspect", annotations=READ_ONLY)
@@ -50,6 +67,6 @@ def signalgrid_codesign_inspect(
     return {
         "path": path,
         "signature": text(["codesign", "-dv", "--verbose=4", path]),
-        "verify": text(["codesign", "--verify", "--deep", "--strict", path]),
+        "verify": _verify(path),
         "assessment": text(["spctl", "--assess", "--verbose=4", path]),
     }
