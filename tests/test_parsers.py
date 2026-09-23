@@ -568,3 +568,54 @@ def test_removable_media_collect_survives_nondict_json():
     from signalgrid_mcp.tools.removable_media import parse_usb
     # simulate the collect path's guard: a list top-level → tree None → available False
     assert parse_usb(None)["available"] is False
+
+
+class TestXProtectCollector:
+    """collect_xprotect must fall back Version → CFBundleShortVersionString so the
+    definitions version is READ on modern macOS instead of always-unknown.
+
+    The bug (found on real macOS 27): `defaults read <XProtect Info> Version` exits
+    nonzero because the `Version` key is gone on macOS 11+, but `probe` reports that as
+    ok=True with the error text as the "answer". The old collector stopped on the first
+    key and returned "Error: Could not find key 'Version'…" as the value — which
+    `_xprotect_readable` then graded UNKNOWN, so the verdict raised the bar on EVERY
+    modern Mac. The fix keys on the EXIT CODE and falls through to the next candidate.
+    """
+
+    @staticmethod
+    def _collect(monkeypatch, by_key):
+        from signalgrid_mcp.tools import software
+
+        def fake_run(cmd, timeout=None):
+            key = cmd[-1]  # ["defaults", "read", <domain>, <key>]
+            return by_key.get(
+                key, {"ok": False, "exit_code": 1, "stdout": "", "stderr": "does not exist"}
+            )
+
+        monkeypatch.setattr(software, "run", fake_run)
+        return software.collect_xprotect()
+
+    def test_modern_macos_falls_back_to_cfbundle(self, monkeypatch):
+        out = self._collect(
+            monkeypatch,
+            {
+                "Version": {"ok": False, "exit_code": 1, "stdout": "", "stderr": "Could not find key 'Version'"},
+                "CFBundleShortVersionString": {"ok": True, "exit_code": 0, "stdout": "5360", "stderr": ""},
+            },
+        )
+        assert out["xprotect_definitions"] == "5360"
+
+    def test_old_macos_still_reads_version_first(self, monkeypatch):
+        # `Version` present → first candidate wins, unchanged from the pre-fix behavior.
+        out = self._collect(
+            monkeypatch,
+            {"Version": {"ok": True, "exit_code": 0, "stdout": "2183", "stderr": ""}},
+        )
+        assert out["xprotect_definitions"] == "2183"
+
+    def test_all_keys_absent_is_unavailable_not_the_error_as_value(self, monkeypatch):
+        # Every candidate missing → a fail-safe "unavailable:" string, never a bare
+        # error masquerading as a version (which `_xprotect_readable` would still reject,
+        # but the collector should not present it as an answer).
+        out = self._collect(monkeypatch, {})
+        assert out["xprotect_definitions"].startswith("unavailable:")
