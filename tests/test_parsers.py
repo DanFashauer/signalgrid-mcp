@@ -655,3 +655,28 @@ class TestUpdateSettingsCollector:
         assert out["ConfigDataInstall"] == "1"
         assert out["AutomaticCheckEnabled"] is None  # absent on modern macOS
         assert out["LastUpdatesAvailable"] is None
+
+
+class TestScreenLockStatusParsing:
+    """parse_screenlock_status reads the lock state from `sysadminctl -screenLock
+    status`, the modern source — the com.apple.screensaver askForPassword/Delay keys
+    are gone on macOS 11+, so the legacy defaults reads returned unknown and this
+    safety-critical signal was dead on every modern Mac (measured on macOS 27)."""
+
+    from signalgrid_mcp.tools.screen_lock import parse_screenlock_status as _p
+
+    def test_immediate_is_password_on_wake_zero_delay(self):
+        # Real macOS 27 output carries a process-log prefix on stderr; parse through it.
+        assert TestScreenLockStatusParsing._p(
+            "2026-09-23 14:11:27.620 sysadminctl[34557] screenLock delay is immediate", True
+        ) == (True, 0)
+
+    def test_off_is_no_password_on_wake(self):
+        assert TestScreenLockStatusParsing._p("screenLock is off", True) == (False, None)
+
+    def test_n_seconds_delay(self):
+        assert TestScreenLockStatusParsing._p("screenLock delay is 30 seconds", True) == (True, 30)
+
+    def test_unrecognized_or_unrun_is_unknown_never_assumed_on(self):
+        assert TestScreenLockStatusParsing._p("garbage", True) == (None, None)
+        assert TestScreenLockStatusParsing._p("screenLock delay is immediate", False) == (None, None)
