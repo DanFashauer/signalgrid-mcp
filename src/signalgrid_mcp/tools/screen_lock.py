@@ -9,8 +9,10 @@ facts that together decide whether the device actually auto-locks when left idle
   • how long the grace delay is before that password is demanded, and
   • whether the display ever sleeps (the event that engages the lock).
 
-It reads user-domain preferences (`defaults -currentHost read com.apple.screensaver`)
-and the active power profile (`pmset -g`); it changes nothing and enforces nothing.
+It reads the lock state (`sysadminctl -screenLock status`, with the legacy
+`defaults -currentHost read com.apple.screensaver` keys as a fallback for older
+macOS) and the active power profile (`pmset -g`); it changes nothing and enforces
+nothing.
 
 Fail-safe: a value that could not be read is `null` (UNKNOWN), never assumed
 healthy. `locks_when_idle` is `true` ONLY when a password is required, the grace
@@ -72,6 +74,31 @@ def parse_displaysleep(raw: str, ok: bool) -> int | None:
     if m is None:
         return None
     return int(m.group(1))
+
+
+def parse_screenlock_status(raw: str, ok: bool) -> tuple[bool | None, int | None]:
+    """Modern source for (password_on_wake, delay_seconds) from
+    `sysadminctl -screenLock status` — the `com.apple.screensaver`
+    `askForPassword`/`askForPasswordDelay` keys are GONE on macOS 11+ (measured
+    absent on macOS 26/27), so the legacy `defaults` reads always returned unknown
+    and this safety-critical signal was dead on every modern Mac.
+
+    `sysadminctl` (no elevation) prints one of, to stderr with a process-log prefix:
+      'screenLock is off'             -> (False, None)  no password on wake
+      'screenLock delay is immediate' -> (True, 0)      password demanded at once
+      'screenLock delay is N seconds' -> (True, N)      password after N s grace
+    Anything else / not ok -> (None, None), fail-safe (unknown, never assumed on)."""
+    if not ok:
+        return (None, None)
+    s = raw.lower()
+    if "screenlock is off" in s:
+        return (False, None)
+    if "screenlock delay is immediate" in s:
+        return (True, 0)
+    m = re.search(r"screenlock delay is (\d+)\s*second", s)
+    if m:
+        return (True, int(m.group(1)))
+    return (None, None)
 
 
 def assess(
@@ -148,12 +175,22 @@ def assess(
 def collect_screen_lock() -> dict[str, Any]:
     """Read the live screen-lock posture. Each probe degrades independently to
     unknown, so one unreadable value never sinks the others."""
-    ask = probe(["defaults", "-currentHost", "read", "com.apple.screensaver", "askForPassword"])
-    delay = probe(["defaults", "-currentHost", "read", "com.apple.screensaver", "askForPasswordDelay"])
+    # Modern source first (macOS 11+): the screensaver askForPassword/Delay keys are
+    # gone, so read the authoritative lock state from `sysadminctl -screenLock status`.
+    sl = probe(["sysadminctl", "-screenLock", "status"])
+    password_on_wake, delay_seconds = parse_screenlock_status(sl["raw"], sl["ok"])
+    # Fall back to the legacy user-domain defaults where sysadminctl gave nothing
+    # (older macOS, or an unrecognized form). Fail-safe: still None if both fail.
+    if password_on_wake is None:
+        ask = probe(["defaults", "-currentHost", "read", "com.apple.screensaver", "askForPassword"])
+        password_on_wake = _bool_flag(ask["raw"], ask["ok"])
+    if delay_seconds is None:
+        d = probe(["defaults", "-currentHost", "read", "com.apple.screensaver", "askForPasswordDelay"])
+        delay_seconds = _int_seconds(d["raw"], d["ok"])
     pm = probe(["pmset", "-g"])
     return assess(
-        _bool_flag(ask["raw"], ask["ok"]),
-        _int_seconds(delay["raw"], delay["ok"]),
+        password_on_wake,
+        delay_seconds,
         parse_displaysleep(pm["raw"], pm["ok"]),
     )
 
