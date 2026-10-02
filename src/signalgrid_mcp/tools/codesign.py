@@ -11,20 +11,24 @@ from signalgrid_mcp.runner import run, text
 
 
 def _verify(path: str) -> str:
-    """Signature validity for `path`, keyed on the EXIT CODE.
+    """Signature validity for `path`, keyed on the EXIT CODE, never on the output text.
 
     `codesign --verify --deep --strict` is SILENT on success — exit 0, no stdout, no
     stderr — so `text()` returned its "unavailable" fallback and EVERY validly-signed
     app read as if the check could not run (the field's whole job, "valid on disk", was
-    unreachable). Map it explicitly: exit 0 -> valid, nonzero -> the specific failure
-    on stderr, couldn't-run-at-all -> unavailable.
+    unreachable). Three disjoint shapes, so a path or message can never fake another:
+    exit 0 -> the literal "valid on disk"; nonzero -> "invalid: <codesign output>";
+    the check did not run (no binary, timeout, killed by a signal) -> "unavailable: ...".
     """
     r = run(["codesign", "--verify", "--deep", "--strict", path])
     if "error" in r:
         return f"unavailable: {r['error']}"
-    if r["ok"]:
-        return r["stdout"] or r["stderr"] or "valid on disk"
-    return r["stderr"] or r["stdout"] or f"invalid (exit {r['exit_code']})"
+    code = r["exit_code"]
+    if code == 0:
+        return "valid on disk"
+    if code < 0:  # subprocess reports death-by-signal N as -N: the check never finished
+        return f"unavailable: codesign killed by signal {-code}"
+    return "invalid: " + (r["stderr"] or r["stdout"] or f"exit {code}")
 
 
 @mcp.tool(name="signalgrid_codesign_inspect", annotations=READ_ONLY)
@@ -56,8 +60,9 @@ def signalgrid_codesign_inspect(
         - path: the inspected path
         - signature: `codesign -dv --verbose=4` output (authority chain,
           team identifier, hashes)
-        - verify: `codesign --verify --deep --strict` result ("valid on disk"
-          style output, or the specific failure)
+        - verify: `codesign --verify --deep --strict` result, one of three
+          disjoint shapes: exactly "valid on disk"; "invalid: <codesign
+          output>"; or "unavailable: <why>" when the check did not run
         - assessment: `spctl --assess --verbose=4` Gatekeeper verdict
           (accepted/rejected and the source, e.g. "Notarized Developer ID")
 
