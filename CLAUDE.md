@@ -63,8 +63,10 @@ no backlog file, so work arrives as a pull request with its reason in the body.
    `tests/test_live_collectors.py` asserts only that XProtect definitions read as
    a version, update settings are never an error string, screen lock parses when
    `sysadminctl` reports, SIP / FileVault / Gatekeeper read as booleans, and
-   identity and OS version read. Nothing else is proven live by CI. A green
-   ubuntu run is never evidence that a collector works.
+   identity and OS version read, and the public code-signature inspector reports
+   `/bin/ls` as valid on disk. This is bounded live coverage, not proof that every
+   collector reads a value. A green ubuntu run is never evidence that a collector
+   works.
 5. **Nothing ships by assertion.** `README.md` must list and describe every
    registered tool (`git grep 'name="signalgrid_' src/` is the list;
    `EXPECTED_TOOLS` in `tests/test_smoke.py` must match it). `CHANGELOG.md` is
