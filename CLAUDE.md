@@ -1,7 +1,7 @@
 # CLAUDE.md — signalgrid-mcp
 
-Guidance for Claude Code (and humans) working in this repository. Read it before
-your first change. These rules override default behaviour.
+Guidance for owner-authorized agents and humans working in this repository.
+Read it before your first change. These rules override default behaviour.
 
 ## What this is
 
@@ -96,14 +96,24 @@ DR-063 is proposed (PR #1357 in the Review-Hub), not yet in force.
   when the owner writes `@claude`: owner-only trigger, authenticated by the
   repository secret `CLAUDE_CODE_OAUTH_TOKEN`, which only the owner mints (no
   lane creates, reads or moves it), and it never merges.
-- Every model-run stage names its tier on the spawn itself and never inherits the
-  coordinator's model (DR-047). Haiku for bulk mechanical work (log scanning,
-  mapping reads, doc regeneration); Sonnet for building, verification and reads
-  that feed a decision; Opus for judgment and review (DR-047, DR-063 rule 6). An
-  unavailable tier resolves up to Opus. Fable and Mythos never run an engineering
-  or review stage.
-- Pull requests are opened by lanes and merged by a person. A lane never merges
-  its own work here and never force-pushes.
+- Record the actual provider/model and any required native review tier for every
+  model-run stage (DR-047). Local Ollama is primary for bounded ordinary work.
+  Claude/Codex supply necessary escalation or genuine independent source review
+  within the current owner-approved limits and model tiers. An already authorized
+  escalation may run within those limits; a missing capability never authorizes a
+  new provider, paid plan, credential, budget reset or cap increase.
+- The owner-authorized repository steward selects bounded work only after fresh
+  source, comments, findings and ownership checks, with an exclusive visible claim
+  and an explicit ready label. A label or generated proposal does not expand a
+  source grant, waive a check or authorize an owner-reserved decision.
+- Qualified automated landing requires all four independent source-review lenses
+  on the same final head, the full applicable local validation, ordinary hooks and
+  publication, successful required CI on that exact head, findings disposition,
+  and the current owner-authorized DR-037 delivery conditions. Land serially using
+  a freshly reread full 40-character expected head. Record genuine source-review
+  evidence as a GitHub COMMENT review; no separate reviewer account/App or mandatory
+  approving vote is required. Never force-push, delete branches, bypass protection,
+  fabricate evidence or decide owner-reserved matters.
 - Raise your hand when stuck (DR-054): say what you were doing, what blocked you,
   what you need and who can unblock it, instead of returning a partial result as
   done. From a Review-Hub checkout run `pnpm run hand:raise -- --doing "…"
@@ -112,4 +122,6 @@ DR-063 is proposed (PR #1357 in the Review-Hub), not yet in force.
 
 ## Owner
 
-Dan Fashauer. He decides; Claude executes. Be concise — he reads on a phone.
+Dan Fashauer owns scope and reserved decisions. Authorized local workers and the
+repository steward carry routine work within the existing limits. Be concise — he
+reads on a phone.
