@@ -102,3 +102,10 @@ def test_os_version_reads_as_a_version():
     assert version and re.match(r"\d+(\.\d+)*$", str(version).strip()), (
         f"OS product_version did not read as a version: {version!r}"
     )
+
+
+def test_codesign_silent_success_reports_a_valid_system_binary():
+    # A signed macOS system binary must not become unknown on a silent exit 0.
+    from signalgrid_mcp.tools.codesign import signalgrid_codesign_inspect
+
+    assert signalgrid_codesign_inspect("/bin/ls")["verify"] == "valid on disk"
