@@ -53,9 +53,10 @@ arrives as an explicitly selected pull request with its reason in the body.
    follows.
 4. **Truthful on CI.** Ubuntu CI proves the code, not the signals. `verify.sh`
    installs, runs `pytest -q` (on a Mac that includes the live collector tests),
-   then `tools/inspect_stdio.py`, which fails only on a crash, a missing tool or
-   a missing read-only marker and exits 0 while tools read unknown; whether a
-   signal is live is the `value`/`unknown` column it prints. The `test-macos` CI
+   then `tools/inspect_stdio.py`, which rejects crashes, missing tools, MCP tool
+   errors and missing read-only markers. Honest unknown results can still pass
+   protocol health. Its `value`/`unknown` column uses text-marker heuristics and
+   is not proof that a signal is live. The `test-macos` CI
    job runs `pytest -q` on GitHub's macOS runner. Its live coverage is exactly
    what `tests/test_live_collectors.py` asserts, not proof that every collector
    reads a value. A green ubuntu run is never evidence that a collector works.
@@ -63,9 +64,9 @@ arrives as an explicitly selected pull request with its reason in the body.
    registered tool (`git grep 'name="signalgrid_' src/` is the list;
    `EXPECTED_TOOLS` in `tests/test_smoke.py` must match it). `CHANGELOG.md` is
    meant to describe what shipped, so do not use it as the tool list. A
-   capability is claimed only after it reads a value on a real Mac (the
-   `verify.sh` inspector column or a live-collector test); being registered, or
-   green on ubuntu, is not that.
+   capability is claimed only after successful, signal-specific returned data
+   or a corresponding live-collector assertion establishes it on a real Mac.
+   An inspector label, registration or green ubuntu run is not that proof.
 
 ## Before you push
 

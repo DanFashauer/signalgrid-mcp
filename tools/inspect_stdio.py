@@ -2,17 +2,17 @@
 """Node-free MCP inspector for the SignalGrid server.
 
 Connects over stdio exactly as an MCP client would, initializes the session,
-lists every tool, and calls each one with default arguments — then reports, per
+lists every tool, and calls each with bounded probe arguments — then reports, per
 tool: its read-only annotation, whether its input schema is well-formed, and
-whether it resolved a REAL value or an honest "unknown" (the graceful-degradation
-path). It exits non-zero only on a genuine protocol failure: a crash, a missing
-expected tool, or a tool that dishonestly asserts a posture it could not actually
-determine.
+its text-marker classification. A "value" label is a heuristic, not verification
+of signal data. It exits non-zero on a crash, a missing expected tool, an MCP
+tool error, or a missing read-only annotation. Honest unknown results remain
+protocol-health successes; they are not live-signal evidence.
 
 This is the scriptable equivalent of `npx @modelcontextprotocol/inspector` — it
-needs no Node, so `verify.sh` can run it anywhere. On the Mac it is assessing,
-every probe returns real values; on Linux CI the same run proves the protocol,
-registration, and honesty invariants without those values.
+needs no Node, so `verify.sh` can run it anywhere. Live-signal claims require
+successful signal-specific returned data or a corresponding assertion on a real
+Mac. This script alone does not establish that proof on any platform.
 
     python3 tools/inspect_stdio.py           # human-readable report
     python3 tools/inspect_stdio.py --json     # machine-readable summary
@@ -57,6 +57,10 @@ EXPECTED_TOOLS = {
 
 UNKNOWN_MARKERS = ("not macos", "not found", '"unknown"', "could not", "unavailable", ": null")
 
+# This existing tool requires a path. Inspect a bounded system binary rather
+# than calling it with invalid empty arguments or requesting elevation.
+PROBE_ARGUMENTS = {"signalgrid_codesign_inspect": {"path": "/bin/ls"}}
+
 
 def _text(result) -> str:
     out = ""
@@ -86,7 +90,7 @@ async def run() -> int:
                 destructive = getattr(ann, "destructiveHint", None) if ann else None
                 schema_ok = isinstance(t.inputSchema, dict)
                 try:
-                    res = await session.call_tool(t.name, {})
+                    res = await session.call_tool(t.name, dict(PROBE_ARGUMENTS.get(t.name, {})))
                 except Exception as exc:  # protocol/tool crash — never acceptable
                     crashes.append((t.name, f"{type(exc).__name__}: {exc}"))
                     rows.append({"tool": t.name, "status": "CRASH", "read_only": read_only})
@@ -101,12 +105,15 @@ async def run() -> int:
                     "destructive": destructive,
                     "schema_ok": schema_ok,
                     "is_error": is_error,
-                    "resolved": "unknown" if resolved_unknown else "value",
+                    "resolved": "error" if is_error else "unknown" if resolved_unknown else "value",
+                    "classification_basis": "text_marker_heuristic",
+                    "live_verified": False,
                     "bytes": len(body),
                 })
 
             missing = sorted(EXPECTED_TOOLS - names)
             not_read_only = [r["tool"] for r in rows if r.get("read_only") is not True]
+            tool_errors = [r["tool"] for r in rows if r.get("is_error") is True]
 
             summary = {
                 "server": {"name": server_name, "version": server_version},
@@ -116,6 +123,7 @@ async def run() -> int:
                 "all_read_only": not not_read_only,
                 "non_read_only_tools": not_read_only,
                 "crashes": [c[0] for c in crashes],
+                "tool_errors": tool_errors,
                 "resolved_values": sum(1 for r in rows if r.get("resolved") == "value"),
                 "resolved_unknown": sum(1 for r in rows if r.get("resolved") == "unknown"),
             }
@@ -134,12 +142,12 @@ async def run() -> int:
                   f"schema={'ok' if r['schema_ok'] else 'BAD'} "
                   f"-> {r['resolved']:7} ({r['bytes']}b)")
         print(f"\nresolved: {summary['resolved_values']} value / {summary['resolved_unknown']} unknown")
-        print("(on the Mac being assessed, macOS-only probes resolve to real values; "
-              "an 'unknown' there is a discrepancy to investigate — missing binary, "
-              "timeout, or a probe that needs elevation / Full Disk Access.)")
+        print("(text-marker classifications are heuristic; a value label is not "
+              "verified live-signal evidence. Honest unknowns may reflect an absent "
+              "binary, timeout or unavailable permission; do not infer a value.)")
 
     # Fail only on a genuine protocol/contract violation.
-    ok = not crashes and not missing and not not_read_only
+    ok = not crashes and not missing and not not_read_only and not tool_errors
     if not ok:
         print("\nFAIL:", file=sys.stderr)
         if crashes:
@@ -148,6 +156,8 @@ async def run() -> int:
             print(f"  missing tools: {missing}", file=sys.stderr)
         if not_read_only:
             print(f"  tools not marked read-only: {not_read_only}", file=sys.stderr)
+        if tool_errors:
+            print(f"  MCP tool errors: {tool_errors}", file=sys.stderr)
         return 1
     print("\nOK — protocol healthy, all expected tools present, every tool read-only.")
     return 0
