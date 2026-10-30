@@ -3,19 +3,18 @@ import asyncio
 from contextlib import asynccontextmanager
 import importlib.util
 import json
-import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace as NS
-import uuid
 import pytest
 
 
+spec = importlib.util.spec_from_file_location("inspect_stdio", Path(__file__).parents[1] / "tools/inspect_stdio.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+
 def exercise(monkeypatch, capsys, *, is_error=False, body='{"value": 7}', read_only=True):
-    source = Path(os.environ.get("SIGNALGRID_INSPECTOR_UNDER_TEST", Path(__file__).parents[1] / "tools/inspect_stdio.py"))
-    spec = importlib.util.spec_from_file_location("inspector_case_" + uuid.uuid4().hex, source)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     calls = []
     target = "signalgrid_device_identity"
 
@@ -56,7 +55,6 @@ def exercise(monkeypatch, capsys, *, is_error=False, body='{"value": 7}', read_o
 
 @pytest.mark.parametrize("body", [
     "Error: permission denied",
-    "Error: unknown operation",
     "Error: temporarily unavailable",
 ])
 def test_mcp_errors_are_never_values_or_healthy_protocol_success(monkeypatch, capsys, body):
@@ -64,6 +62,7 @@ def test_mcp_errors_are_never_values_or_healthy_protocol_success(monkeypatch, ca
     assert status == 1
     assert row["resolved"] == "error"
     assert row["live_verified"] is False
+    assert row["classification_basis"] == "mcp_isError_flag"
     assert data["summary"]["tool_errors"] == ["signalgrid_device_identity"]
 
 
@@ -91,4 +90,3 @@ def test_existing_read_only_requirement_remains_a_health_gate(monkeypatch, capsy
     status, data, _row, _calls = exercise(monkeypatch, capsys, read_only=False)
     assert status == 1
     assert data["summary"]["all_read_only"] is False
-

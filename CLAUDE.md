@@ -57,9 +57,10 @@ arrives as an explicitly selected pull request with its reason in the body.
    errors and missing read-only markers. Honest unknown results can still pass
    protocol health. Its `value`/`unknown` column uses text-marker heuristics and
    is not proof that a signal is live. The `test-macos` CI
-   job runs `pytest -q` on GitHub's macOS runner. Its live coverage is exactly
-   what `tests/test_live_collectors.py` asserts, not proof that every collector
-   reads a value. A green ubuntu run is never evidence that a collector works.
+   job runs `pytest -q` on GitHub's macOS runner. Live assertions are in
+   `tests/test_live_collectors.py` and Darwin-only checks in `tests/test_smoke.py`;
+   these do not prove every collector reads a value. A green ubuntu run is never
+   evidence that a collector works.
 5. **Nothing ships by assertion.** `README.md` must list and describe every
    registered tool (`git grep 'name="signalgrid_' src/` is the list;
    `EXPECTED_TOOLS` in `tests/test_smoke.py` must match it). `CHANGELOG.md` is
@@ -79,7 +80,7 @@ pytest -q                     # the whole suite; CI runs it on ubuntu-latest and
 Add a test for every collector or verdict change — the test that fails on the
 old behaviour and passes on the new — and name the macOS version you verified on.
 
-## How the AI lanes work here (SignalGrid DR-047, DR-054)
+## How the AI lanes work here (owner directions; SignalGrid DR-047, DR-054)
 - Record the actual provider/model and any required native review tier for every
   model-run stage (DR-047). Local Ollama is primary for bounded ordinary work.
   Claude/Codex supply necessary escalation or genuine independent source review
@@ -91,18 +92,21 @@ old behaviour and passes on the new — and name the macOS version you verified 
   and an explicit ready label. A label or generated proposal does not expand a
   source grant, waive a check or authorize an owner-reserved decision.
 - Qualified automated landing requires all four independent source-review lenses
-  on the same final head, the full applicable local validation, ordinary hooks and
+  in each own Codex and Claude system on the same final head, the full applicable
+  local validation, ordinary hooks and
   publication, successful required CI on that exact head, findings disposition,
   and the current owner-authorized DR-037 delivery conditions. Land serially using
   a freshly reread full 40-character expected head. Record genuine source-review
   evidence as a GitHub COMMENT review; no separate reviewer account/App or mandatory
-  approving vote is required. Never force-push, delete branches, bypass protection,
-  fabricate evidence or decide owner-reserved matters.
+  approving vote is required. Never force-push, bypass protection, fabricate
+  evidence or decide owner-reserved matters. Retire an exact topic branch only
+  within current owner scope, after its contents are preserved and its completion,
+  supersession or removal disposition is verified.
 - Raise your hand when stuck (DR-054): say what you were doing, what blocked you,
   what you need and who can unblock it, instead of returning a partial result as
   done. From a Review-Hub checkout run `pnpm run hand:raise -- --doing "…"
   --blocked "…" --need "…" --who owner|"mac lane"|"cloud lane"`; without one
-  (for example in the `@claude` workflow) open an issue on this repository.
+  (for example in the proposed `@claude` workflow) open an issue on this repository.
 
 ## Owner
 

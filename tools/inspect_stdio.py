@@ -106,7 +106,7 @@ async def run() -> int:
                     "schema_ok": schema_ok,
                     "is_error": is_error,
                     "resolved": "error" if is_error else "unknown" if resolved_unknown else "value",
-                    "classification_basis": "text_marker_heuristic",
+                    "classification_basis": "mcp_isError_flag" if is_error else "text_marker_heuristic",
                     "live_verified": False,
                     "bytes": len(body),
                 })
